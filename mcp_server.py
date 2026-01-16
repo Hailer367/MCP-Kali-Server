@@ -30,16 +30,21 @@ DEFAULT_REQUEST_TIMEOUT = 300  # 5 minutes default timeout for API requests
 class KaliToolsClient:
     """Client for communicating with the Kali Linux Tools API Server"""
     
-    def __init__(self, server_url: str, timeout: int = DEFAULT_REQUEST_TIMEOUT):
+    def __init__(self, server_url: str, api_key: Optional[str] = None, timeout: int = DEFAULT_REQUEST_TIMEOUT):
         """
         Initialize the Kali Tools Client
         
         Args:
             server_url: URL of the Kali Tools API Server
+            api_key: Optional API Key for authentication
             timeout: Request timeout in seconds
         """
         self.server_url = server_url.rstrip("/")
+        self.api_key = api_key
         self.timeout = timeout
+        self.headers = {}
+        if self.api_key:
+            self.headers["X-API-Key"] = self.api_key
         logger.info(f"Initialized Kali Tools Client connecting to {server_url}")
         
     def safe_get(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -60,7 +65,7 @@ class KaliToolsClient:
 
         try:
             logger.debug(f"GET {url} with params: {params}")
-            response = requests.get(url, params=params, timeout=self.timeout)
+            response = requests.get(url, params=params, headers=self.headers, timeout=self.timeout)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
@@ -85,7 +90,7 @@ class KaliToolsClient:
         
         try:
             logger.debug(f"POST {url} with data: {json_data}")
-            response = requests.post(url, json=json_data, timeout=self.timeout)
+            response = requests.post(url, json=json_data, headers=self.headers, timeout=self.timeout)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.RequestException as e:
@@ -95,17 +100,19 @@ class KaliToolsClient:
             logger.error(f"Unexpected error: {str(e)}")
             return {"error": f"Unexpected error: {str(e)}", "success": False}
 
-    def execute_command(self, command: str) -> Dict[str, Any]:
+    def execute_command(self, command: str, background: bool = False, use_pty: bool = False) -> Dict[str, Any]:
         """
         Execute a generic command on the Kali server
         
         Args:
             command: Command to execute
+            background: Whether to run in background
+            use_pty: Whether to use a pseudo-terminal
             
         Returns:
             Command execution results
         """
-        return self.safe_post("api/command", {"command": command})
+        return self.safe_post("api/command", {"command": command, "background": background, "use_pty": use_pty})
     
     def check_health(self) -> Dict[str, Any]:
         """
@@ -330,6 +337,66 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
         return kali_client.safe_post("api/tools/wpscan", data)
 
     @mcp.tool()
+    def ffuf_scan(url: str, wordlist: str = "/usr/share/wordlists/dirb/common.txt", additional_args: str = "") -> Dict[str, Any]:
+        """
+        Execute FFUF web fuzzer.
+
+        Args:
+            url: Target URL (must contain FUZZ keyword)
+            wordlist: Path to wordlist
+            additional_args: Additional FFUF arguments
+
+        Returns:
+            Fuzzing results
+        """
+        data = {
+            "url": url,
+            "wordlist": wordlist,
+            "additional_args": additional_args
+        }
+        return kali_client.safe_post("api/tools/ffuf", data)
+
+    @mcp.tool()
+    def searchsploit_query(query: str, additional_args: str = "") -> Dict[str, Any]:
+        """
+        Search for exploits using searchsploit.
+
+        Args:
+            query: Search query
+            additional_args: Additional searchsploit arguments
+
+        Returns:
+            Search results
+        """
+        data = {
+            "query": query,
+            "additional_args": additional_args
+        }
+        return kali_client.safe_post("api/tools/searchsploit", data)
+
+    @mcp.tool()
+    def hashcat_crack(hash_file: str, mode: str, wordlist: str = "/usr/share/wordlists/rockyou.txt", additional_args: str = "") -> Dict[str, Any]:
+        """
+        Execute Hashcat password cracker.
+
+        Args:
+            hash_file: Path to hash file
+            mode: Hash mode (e.g., 0 for MD5, 1000 for NTLM)
+            wordlist: Path to wordlist
+            additional_args: Additional hashcat arguments
+
+        Returns:
+            Cracking results
+        """
+        data = {
+            "hash_file": hash_file,
+            "mode": mode,
+            "wordlist": wordlist,
+            "additional_args": additional_args
+        }
+        return kali_client.safe_post("api/tools/hashcat", data)
+
+    @mcp.tool()
     def enum4linux_scan(target: str, additional_args: str = "-a") -> Dict[str, Any]:
         """
         Execute Enum4linux Windows/Samba enumeration tool.
@@ -358,17 +425,118 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
         return kali_client.check_health()
     
     @mcp.tool()
-    def execute_command(command: str) -> Dict[str, Any]:
+    def execute_command(command: str, background: bool = False, use_pty: bool = False) -> Dict[str, Any]:
         """
         Execute an arbitrary command on the Kali server.
         
         Args:
             command: The command to execute
+            background: Whether to run in the background (returns a task ID)
+            use_pty: Whether to use a pseudo-terminal (PTY) for the command
             
         Returns:
-            Command execution results
+            Command execution results or task ID
         """
-        return kali_client.execute_command(command)
+        return kali_client.execute_command(command, background, use_pty)
+
+    @mcp.tool()
+    def list_tasks() -> Dict[str, Any]:
+        """
+        List all background tasks on the Kali server.
+
+        Returns:
+            List of tasks
+        """
+        return kali_client.safe_get("api/tasks")
+
+    @mcp.tool()
+    def get_task_status(task_id: str) -> Dict[str, Any]:
+        """
+        Get the status and output of a background task.
+
+        Args:
+            task_id: The ID of the task
+
+        Returns:
+            Task status and output
+        """
+        return kali_client.safe_get(f"api/tasks/{task_id}")
+
+    @mcp.tool()
+    def kill_task(task_id: str) -> Dict[str, Any]:
+        """
+        Kill a running background task.
+
+        Args:
+            task_id: The ID of the task to kill
+
+        Returns:
+            Success message
+        """
+        return kali_client.safe_post(f"api/tasks/{task_id}/kill", {})
+
+    @mcp.tool()
+    def list_files(path: str = ".") -> Dict[str, Any]:
+        """
+        List files in a directory on the Kali server.
+
+        Args:
+            path: Path to the directory
+
+        Returns:
+            List of files and directories
+        """
+        return kali_client.safe_get("api/files/list", {"path": path})
+
+    @mcp.tool()
+    def read_file(path: str) -> Dict[str, Any]:
+        """
+        Read the content of a file on the Kali server.
+
+        Args:
+            path: Path to the file
+
+        Returns:
+            File content
+        """
+        return kali_client.safe_get("api/files/read", {"path": path})
+
+    @mcp.tool()
+    def write_file(path: str, content: str) -> Dict[str, Any]:
+        """
+        Write content to a file on the Kali server.
+
+        Args:
+            path: Path to the file
+            content: Content to write
+
+        Returns:
+            Success message
+        """
+        return kali_client.safe_post("api/files/write", {"path": path, "content": content})
+
+    @mcp.tool()
+    def get_system_info() -> Dict[str, Any]:
+        """
+        Get system and network information from the Kali server.
+
+        Returns:
+            System information (OS, network interfaces, etc.)
+        """
+        return kali_client.safe_get("api/system/info")
+
+    @mcp.tool()
+    def delete_file(path: str) -> Dict[str, Any]:
+        """
+        Delete a file or directory on the Kali server.
+
+        Args:
+            path: Path to the file or directory
+
+        Returns:
+            Success message
+        """
+        return kali_client.safe_post("api/files/delete", {"path": path})
 
     return mcp
 
@@ -377,6 +545,8 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Run the Kali MCP Client")
     parser.add_argument("--server", type=str, default=DEFAULT_KALI_SERVER, 
                       help=f"Kali API server URL (default: {DEFAULT_KALI_SERVER})")
+    parser.add_argument("--api-key", type=str, default=os.environ.get("KALI_API_KEY"),
+                      help="API Key for authentication")
     parser.add_argument("--timeout", type=int, default=DEFAULT_REQUEST_TIMEOUT,
                       help=f"Request timeout in seconds (default: {DEFAULT_REQUEST_TIMEOUT})")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
@@ -392,7 +562,7 @@ def main():
         logger.debug("Debug logging enabled")
     
     # Initialize the Kali Tools client
-    kali_client = KaliToolsClient(args.server, args.timeout)
+    kali_client = KaliToolsClient(args.server, args.api_key, args.timeout)
     
     # Check server health and log the result
     health = kali_client.check_health()
