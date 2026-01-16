@@ -224,6 +224,23 @@ class CommandExecutor:
             except Exception as e:
                 logger.error(f"Error killing process: {e}")
 
+    def write_input(self, data: str) -> bool:
+        """Write input to the process stdin (works best with PTY)"""
+        if hasattr(self, 'master_fd') and self.master_fd is not None:
+            try:
+                os.write(self.master_fd, data.encode())
+                return True
+            except Exception as e:
+                logger.error(f"Error writing to PTY: {e}")
+        elif self.process and self.process.stdin:
+            try:
+                self.process.stdin.write(data)
+                self.process.stdin.flush()
+                return True
+            except Exception as e:
+                logger.error(f"Error writing to stdin: {e}")
+        return False
+
 
 def execute_command(command: str, background: bool = False, use_pty: bool = False) -> Dict[str, Any]:
     """
@@ -256,6 +273,34 @@ def execute_command(command: str, background: bool = False, use_pty: bool = Fals
     else:
         return executor.execute(wait=True, use_pty=use_pty)
 
+
+@app.route("/api/batch", methods=["POST"])
+@require_api_key
+def batch_command():
+    """Execute multiple commands in parallel as background tasks."""
+    try:
+        params = request.json
+        commands = params.get("commands", [])
+        use_pty = params.get("use_pty", False)
+
+        if not commands or not isinstance(commands, list):
+            return jsonify({"error": "A list of commands is required"}), 400
+
+        task_ids = []
+        for cmd in commands:
+            result = execute_command(cmd, background=True, use_pty=use_pty)
+            task_ids.append({
+                "command": cmd,
+                "task_id": result.get("task_id")
+            })
+
+        return jsonify({
+            "message": f"Started {len(commands)} tasks in parallel",
+            "tasks": task_ids
+        })
+    except Exception as e:
+        logger.error(f"Error in batch command endpoint: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/command", methods=["POST"])
 @require_api_key
@@ -339,6 +384,8 @@ def hashcat():
         mode = params.get("mode", "")
         wordlist = params.get("wordlist", "/usr/share/wordlists/rockyou.txt")
         additional_args = params.get("additional_args", "")
+        background = params.get("background", False)
+        use_pty = params.get("use_pty", False)
 
         if not hash_file or not mode:
             return jsonify({"error": "hash_file and mode parameters are required"}), 400
@@ -348,10 +395,120 @@ def hashcat():
         if additional_args:
             command += f" {additional_args}"
 
-        result = execute_command(command)
+        result = execute_command(command, background=background, use_pty=use_pty)
         return jsonify(result)
     except Exception as e:
         logger.error(f"Error in hashcat endpoint: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/tools/nuclei", methods=["POST"])
+@require_api_key
+def nuclei():
+    """Execute nuclei with the provided parameters."""
+    try:
+        params = request.json
+        target = params.get("target", "")
+        templates = params.get("templates", "")
+        additional_args = params.get("additional_args", "")
+        background = params.get("background", False)
+        use_pty = params.get("use_pty", False)
+
+        if not target:
+            return jsonify({"error": "Target parameter is required"}), 400
+
+        command = f"nuclei -u {target}"
+        if templates:
+            command += f" -t {templates}"
+        if additional_args:
+            command += f" {additional_args}"
+
+        result = execute_command(command, background=background, use_pty=use_pty)
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error in nuclei endpoint: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/tools/feroxbuster", methods=["POST"])
+@require_api_key
+def feroxbuster():
+    """Execute feroxbuster with the provided parameters."""
+    try:
+        params = request.json
+        url = params.get("url", "")
+        wordlist = params.get("wordlist", "")
+        additional_args = params.get("additional_args", "")
+        background = params.get("background", False)
+        use_pty = params.get("use_pty", False)
+
+        if not url:
+            return jsonify({"error": "URL parameter is required"}), 400
+
+        command = f"feroxbuster -u {url}"
+        if wordlist:
+            command += f" -w {wordlist}"
+        if additional_args:
+            command += f" {additional_args}"
+
+        result = execute_command(command, background=background, use_pty=use_pty)
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error in feroxbuster endpoint: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/tools/nxc", methods=["POST"])
+@require_api_key
+def nxc():
+    """Execute NetExec (nxc) with the provided parameters."""
+    try:
+        params = request.json
+        protocol = params.get("protocol", "smb")
+        target = params.get("target", "")
+        additional_args = params.get("additional_args", "")
+        background = params.get("background", False)
+        use_pty = params.get("use_pty", False)
+
+        if not target:
+            return jsonify({"error": "Target parameter is required"}), 400
+
+        command = f"nxc {protocol} {target}"
+        if additional_args:
+            command += f" {additional_args}"
+
+        result = execute_command(command, background=background, use_pty=use_pty)
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error in nxc endpoint: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/tools/msfvenom", methods=["POST"])
+@require_api_key
+def msfvenom():
+    """Execute msfvenom with the provided parameters."""
+    try:
+        params = request.json
+        payload = params.get("payload", "")
+        options = params.get("options", "")
+        output_format = params.get("format", "exe")
+        output_path = params.get("output_path", "")
+        additional_args = params.get("additional_args", "")
+
+        if not payload:
+            return jsonify({"error": "Payload parameter is required"}), 400
+
+        command = f"msfvenom -p {payload}"
+        if options:
+            command += f" {options}"
+        if output_format:
+            command += f" -f {output_format}"
+        if output_path:
+            command += f" -o {output_path}"
+        if additional_args:
+            command += f" {additional_args}"
+
+        result = execute_command(command)
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error in msfvenom endpoint: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -873,6 +1030,36 @@ def get_task_status(task_id):
                 "is_running": executor.is_running,
                 "timed_out": executor.timed_out
             })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/tasks/<task_id>/input", methods=["POST"])
+@require_api_key
+def send_task_input(task_id):
+    """Send input to a background task."""
+    try:
+        params = request.json
+        data = params.get("input", "")
+
+        if not data:
+            return jsonify({"error": "Input data is required"}), 400
+
+        with task_lock:
+            if task_id not in tasks:
+                return jsonify({"error": "Task not found"}), 404
+
+            tinfo = tasks[task_id]
+            executor = tinfo["executor"]
+
+            if not executor.is_running:
+                return jsonify({"error": "Task is not running"}), 400
+
+            success = executor.write_input(data)
+
+        if success:
+            return jsonify({"message": "Input sent successfully"})
+        else:
+            return jsonify({"error": "Failed to send input"}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

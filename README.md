@@ -37,9 +37,10 @@ https://github.com/user-attachments/assets/3ec06ff8-0bdf-4ad5-be71-2ec490b7ee27
 
 - 🧠 **AI Endpoint Integration**: Connect your kali to any MCP of your liking such as claude desktop or 5ier.
 - 🖥️ **Command Execution API**: Exposes a controlled API to execute terminal commands on your Kali Linux machine.
-- 🐚 **Background & PTY Support**: Run long-running scans in the background and use pseudo-terminals for better tool compatibility.
+- 🐚 **Interactive PTY Support**: Run tools in pseudo-terminals and send runtime input (stdin) to tasks, allowing full interaction as if in a local terminal.
+- ⚡ **Parallel Batch Execution**: Launch multiple tools or commands in parallel to speed up reconnaissance and exploitation.
 - 📁 **File Management**: Tools to list, read, write, and delete files on the remote Kali machine.
-- 🕸️ **Web Challenge Support**: AI can interact with websites and APIs, capture flags via `curl` and any other tool AI the needs.
+- 🕸️ **Modern Toolset**: Integrated support for `nuclei`, `feroxbuster`, `nxc` (NetExec), `ffuf`, `msfvenom`, and more.
 - 🔐 **Enhanced Security**: Optional API Key authentication to protect your Kali API.
 - 🔍 **System Context**: AI can gather network and system information to better understand the target environment.
 

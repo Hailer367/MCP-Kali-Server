@@ -375,7 +375,14 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
         return kali_client.safe_post("api/tools/searchsploit", data)
 
     @mcp.tool()
-    def hashcat_crack(hash_file: str, mode: str, wordlist: str = "/usr/share/wordlists/rockyou.txt", additional_args: str = "") -> Dict[str, Any]:
+    def hashcat_crack(
+        hash_file: str,
+        mode: str,
+        wordlist: str = "/usr/share/wordlists/rockyou.txt",
+        additional_args: str = "",
+        background: bool = False,
+        use_pty: bool = False
+    ) -> Dict[str, Any]:
         """
         Execute Hashcat password cracker.
 
@@ -384,6 +391,8 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
             mode: Hash mode (e.g., 0 for MD5, 1000 for NTLM)
             wordlist: Path to wordlist
             additional_args: Additional hashcat arguments
+            background: Whether to run in the background
+            use_pty: Whether to use a pseudo-terminal
 
         Returns:
             Cracking results
@@ -392,9 +401,131 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
             "hash_file": hash_file,
             "mode": mode,
             "wordlist": wordlist,
-            "additional_args": additional_args
+            "additional_args": additional_args,
+            "background": background,
+            "use_pty": use_pty
         }
         return kali_client.safe_post("api/tools/hashcat", data)
+
+    @mcp.tool()
+    def nuclei_scan(
+        target: str,
+        templates: str = "",
+        additional_args: str = "",
+        background: bool = False,
+        use_pty: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Execute Nuclei vulnerability scanner.
+
+        Args:
+            target: Target URL, IP, or hostname
+            templates: Specific templates or tags to run
+            additional_args: Additional Nuclei arguments
+            background: Whether to run in the background
+            use_pty: Whether to use a pseudo-terminal
+
+        Returns:
+            Scan results
+        """
+        data = {
+            "target": target,
+            "templates": templates,
+            "additional_args": additional_args,
+            "background": background,
+            "use_pty": use_pty
+        }
+        return kali_client.safe_post("api/tools/nuclei", data)
+
+    @mcp.tool()
+    def feroxbuster_scan(
+        url: str,
+        wordlist: str = "",
+        additional_args: str = "",
+        background: bool = False,
+        use_pty: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Execute Feroxbuster for recursive directory discovery.
+
+        Args:
+            url: Target URL
+            wordlist: Path to wordlist
+            additional_args: Additional Feroxbuster arguments
+            background: Whether to run in the background
+            use_pty: Whether to use a pseudo-terminal
+
+        Returns:
+            Discovery results
+        """
+        data = {
+            "url": url,
+            "wordlist": wordlist,
+            "additional_args": additional_args,
+            "background": background,
+            "use_pty": use_pty
+        }
+        return kali_client.safe_post("api/tools/feroxbuster", data)
+
+    @mcp.tool()
+    def nxc_execute(
+        target: str,
+        protocol: str = "smb",
+        additional_args: str = "",
+        background: bool = False,
+        use_pty: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Execute NetExec (nxc) for network enumeration and exploitation.
+
+        Args:
+            target: Target IP, hostname, or CIDR
+            protocol: Protocol to use (smb, winrm, ssh, ldap, mssql, etc.)
+            additional_args: Additional NetExec arguments (e.g., -u user -p pass)
+            background: Whether to run in the background
+            use_pty: Whether to use a pseudo-terminal
+
+        Returns:
+            Execution results
+        """
+        data = {
+            "target": target,
+            "protocol": protocol,
+            "additional_args": additional_args,
+            "background": background,
+            "use_pty": use_pty
+        }
+        return kali_client.safe_post("api/tools/nxc", data)
+
+    @mcp.tool()
+    def msfvenom_generate(
+        payload: str,
+        options: str = "",
+        output_format: str = "exe",
+        output_path: str = "",
+        additional_args: str = ""
+    ) -> Dict[str, Any]:
+        """
+        Generate a payload using msfvenom.
+
+        Args:
+            payload: Metasploit payload to use
+            options: Payload options (e.g., LHOST=127.0.0.1 LPORT=4444)
+            output_format: Output format (exe, elf, raw, etc.)
+            output_path: Path to save the generated payload
+            additional_args: Additional msfvenom arguments
+
+        Returns:
+            Generation results
+        """
+        data = {
+            "payload": payload,
+            "options": options,
+            "format": output_format,
+            "output_path": output_path,
+            "additional_args": additional_args
+        }
+        return kali_client.safe_post("api/tools/msfvenom", data)
 
     @mcp.tool()
     def enum4linux_scan(target: str, additional_args: str = "-a") -> Dict[str, Any]:
@@ -440,6 +571,20 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
         return kali_client.execute_command(command, background, use_pty)
 
     @mcp.tool()
+    def parallel_batch_execute(commands: list[str], use_pty: bool = False) -> Dict[str, Any]:
+        """
+        Execute multiple commands in parallel as background tasks.
+
+        Args:
+            commands: A list of command strings to execute
+            use_pty: Whether to use a pseudo-terminal for each command
+
+        Returns:
+            A list of task IDs for the started commands
+        """
+        return kali_client.safe_post("api/batch", {"commands": commands, "use_pty": use_pty})
+
+    @mcp.tool()
     def list_tasks() -> Dict[str, Any]:
         """
         List all background tasks on the Kali server.
@@ -461,6 +606,20 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
             Task status and output
         """
         return kali_client.safe_get(f"api/tasks/{task_id}")
+
+    @mcp.tool()
+    def send_task_input(task_id: str, data: str) -> Dict[str, Any]:
+        """
+        Send input (stdin) to a running background task.
+
+        Args:
+            task_id: The ID of the task
+            data: The input string to send (e.g., a password or 'y\n')
+
+        Returns:
+            Success message
+        """
+        return kali_client.safe_post(f"api/tasks/{task_id}/input", {"input": data})
 
     @mcp.tool()
     def kill_task(task_id: str) -> Dict[str, Any]:
