@@ -415,6 +415,92 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
         return kali_client.safe_post("api/tools/enum4linux", data)
 
     @mcp.tool()
+    def nuclei_scan(target: str, templates: str = "", additional_args: str = "") -> Dict[str, Any]:
+        """
+        Execute Nuclei vulnerability scanner.
+
+        Args:
+            target: Target URL or IP
+            templates: Path to templates or template categories
+            additional_args: Additional Nuclei arguments
+
+        Returns:
+            Scan results
+        """
+        data = {
+            "target": target,
+            "templates": templates,
+            "additional_args": additional_args
+        }
+        return kali_client.safe_post("api/tools/nuclei", data)
+
+    @mcp.tool()
+    def feroxbuster_scan(url: str, wordlist: str = "", additional_args: str = "") -> Dict[str, Any]:
+        """
+        Execute Feroxbuster for recursive content discovery.
+
+        Args:
+            url: Target URL
+            wordlist: Path to wordlist
+            additional_args: Additional Feroxbuster arguments
+
+        Returns:
+            Scan results
+        """
+        data = {
+            "url": url,
+            "wordlist": wordlist,
+            "additional_args": additional_args
+        }
+        return kali_client.safe_post("api/tools/feroxbuster", data)
+
+    @mcp.tool()
+    def nxc_execute(target: str, protocol: str = "smb", username: str = "", password: str = "", additional_args: str = "") -> Dict[str, Any]:
+        """
+        Execute NetExec (nxc) for network enumeration and exploitation.
+
+        Args:
+            target: Target IP, CIDR, or hostname
+            protocol: Protocol to use (smb, ssh, ldap, etc.)
+            username: Username for authentication
+            password: Password for authentication
+            additional_args: Additional NetExec arguments
+
+        Returns:
+            Execution results
+        """
+        data = {
+            "target": target,
+            "protocol": protocol,
+            "username": username,
+            "password": password,
+            "additional_args": additional_args
+        }
+        return kali_client.safe_post("api/tools/nxc", data)
+
+    @mcp.tool()
+    def msfvenom_generate(payload: str, options: Dict[str, Any] = {}, format_type: str = "elf", output_file: str = "") -> Dict[str, Any]:
+        """
+        Execute msfvenom to generate payloads.
+
+        Args:
+            payload: Metasploit payload to use
+            options: Dictionary of payload options (e.g., {"LHOST": "10.10.10.10", "LPORT": "4444"})
+            format_type: Output format (elf, exe, raw, etc.)
+            output_file: Path to save the generated payload
+
+        Returns:
+            Execution results
+        """
+        data = {
+            "payload": payload,
+            "options": options,
+            "format": format_type,
+            "output": output_file
+        }
+        return kali_client.safe_post("api/tools/msfvenom", data)
+
+    @mcp.tool()
     def server_health() -> Dict[str, Any]:
         """
         Check the health status of the Kali API server.
@@ -474,6 +560,34 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
             Success message
         """
         return kali_client.safe_post(f"api/tasks/{task_id}/kill", {})
+
+    @mcp.tool()
+    def send_task_input(task_id: str, input_data: str) -> Dict[str, Any]:
+        """
+        Send interactive input to a running background task.
+
+        Args:
+            task_id: The ID of the task
+            input_data: The input string to send (include newline if needed)
+
+        Returns:
+            Success message
+        """
+        return kali_client.safe_post(f"api/tasks/{task_id}/input", {"input": input_data})
+
+    @mcp.tool()
+    def batch_execute(commands: list[str], use_pty: bool = False) -> Dict[str, Any]:
+        """
+        Execute multiple commands in parallel in the background.
+
+        Args:
+            commands: List of shell commands to execute
+            use_pty: Whether to use a pseudo-terminal for each command
+
+        Returns:
+            A list of task IDs for the background processes.
+        """
+        return kali_client.safe_post("api/batch", {"commands": commands, "use_pty": use_pty})
 
     @mcp.tool()
     def list_files(path: str = ".") -> Dict[str, Any]:
