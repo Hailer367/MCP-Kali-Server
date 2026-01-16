@@ -855,6 +855,99 @@ def enum4linux():
             "error": f"Server error: {str(e)}"
         }), 500
 
+@app.route("/api/tools/semgrep", methods=["POST"])
+@require_api_key
+def semgrep():
+    """Execute semgrep scan with the provided parameters."""
+    try:
+        params = request.json
+        path = params.get("path", ".")
+        config = params.get("config", "p/default")
+        additional_args = params.get("additional_args", "")
+
+        command = f"semgrep scan --json --config {shlex.quote(config)} {shlex.quote(path)}"
+        if additional_args:
+            command += f" {additional_args}"
+
+        result = execute_command(command)
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error in semgrep endpoint: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/tools/safety", methods=["POST"])
+@require_api_key
+def safety():
+    """Execute safety check for Python dependencies."""
+    try:
+        params = request.json
+        path = params.get("path", ".")
+        
+        # Check if requirements.txt exists in the path
+        req_path = os.path.join(path, "requirements.txt")
+        if not os.path.exists(req_path):
+            return jsonify({"error": f"requirements.txt not found in {path}"}), 400
+
+        command = f"safety check -r {shlex.quote(req_path)} --json"
+        result = execute_command(command)
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error in safety endpoint: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/tools/whitebox/scan", methods=["POST"])
+@require_api_key
+def whitebox_scan():
+    """Perform a multi-pattern regex scan for vulnerabilities using ripgrep."""
+    try:
+        params = request.json
+        path = params.get("path", ".")
+        
+        patterns = {
+            "SQL Injection": r"(?i)(select|insert|update|delete|drop).*where.*=.*['\"]\\s*\\+|f['\"].*\\{.*\\}",
+            "Command Injection": r"(os\.system|subprocess\.(Popen|run|call|check_output)|exec|eval|system)\(",
+            "SSRF": r"(requests\.(get|post|put|delete|patch|head|options)|urllib\.request\.urlopen|aiohttp\.ClientSession.*\.get)\(",
+            "Path Traversal": r"(open|os\.path\.(join|abspath)|pathlib\.Path)\(",
+            "Hardcoded Secrets": r"(?i)(api_key|password|secret|token|auth_token|access_key|private_key).*=.*['\"][a-zA-Z0-9\-_]{10,}['\"]"
+        }
+        
+        results = {}
+        for name, pattern in patterns.items():
+            cmd = f"rg --json -e {shlex.quote(pattern)} {shlex.quote(path)}"
+            res = execute_command(cmd)
+            results[name] = res.get("stdout", "")
+            
+        return jsonify(results)
+    except Exception as e:
+        logger.error(f"Error in whitebox scan: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/tools/whitebox/map_project", methods=["POST"])
+@require_api_key
+def map_project():
+    """Identify entry points (routes) in the project."""
+    try:
+        params = request.json
+        path = params.get("path", ".")
+        
+        # Patterns for common web frameworks
+        route_patterns = {
+            "Flask/Django": r"@(app|blueprint|api)\.(route|get|post|put|delete|patch)\(|path\(|re_path\(",
+            "Express/Node.js": r"\.(get|post|put|delete|patch|use)\(['\"]\/",
+            "FastAPI": r"@app\.(get|post|put|delete|patch|options|head|trace)\("
+        }
+        
+        results = {}
+        for framework, pattern in route_patterns.items():
+            cmd = f"rg --json -e {shlex.quote(pattern)} {shlex.quote(path)}"
+            res = execute_command(cmd)
+            results[framework] = res.get("stdout", "")
+            
+        return jsonify(results)
+    except Exception as e:
+        logger.error(f"Error in project mapping: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
 
 # File Management Endpoints
 

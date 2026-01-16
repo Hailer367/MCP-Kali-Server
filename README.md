@@ -39,6 +39,7 @@ https://github.com/user-attachments/assets/3ec06ff8-0bdf-4ad5-be71-2ec490b7ee27
 - 🖥️ **Command Execution API**: Exposes a controlled API to execute terminal commands on your Kali Linux machine.
 - 🐚 **Background, PTY & Interactive Support**: Run long-running scans in the background, use pseudo-terminals, and send interactive input to running tasks.
 - ⚡ **Batch Processing**: Execute multiple commands in parallel for faster reconnaissance and scanning.
+- 🔍 **White Box Scanning**: Specialized tools for deep source code analysis, including Semgrep, Safety, and custom regex-based scanners to identify SQLi, Command Injection, and more.
 - 📁 **File Management**: Tools to list, read, write, and delete files on the remote Kali machine.
 - 🕸️ **Web Challenge Support**: AI can interact with websites and APIs, capture flags via `curl` and any other tool AI the needs.
 - 🔐 **Enhanced Security**: Optional API Key authentication to protect your Kali API.
@@ -95,6 +96,9 @@ There are more possibilites than described since the AI model can now execute co
 
 - Disk forensics with SleuthKit
   - Automating analysis from disk images, timeline generation, file carving, and hash comparisons.
+
+- **White Box Source Code Analysis**
+  - AI can now scan the entire repository for vulnerabilities using Semgrep, Safety, and specialized regex-based scanners. It can also map project routes and entry points to better understand the attack surface.
 
 
 ## ⚠️ Disclaimer:

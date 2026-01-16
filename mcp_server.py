@@ -501,6 +501,75 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
         return kali_client.safe_post("api/tools/msfvenom", data)
 
     @mcp.tool()
+    def semgrep_scan(path: str = ".", config: str = "p/default", additional_args: str = "") -> Dict[str, Any]:
+        """
+        Execute Semgrep static analysis on a directory.
+
+        Args:
+            path: Path to the directory to scan
+            config: Semgrep configuration (default: p/default)
+            additional_args: Additional Semgrep arguments
+
+        Returns:
+            Scan results in JSON format
+        """
+        data = {
+            "path": path,
+            "config": config,
+            "additional_args": additional_args
+        }
+        return kali_client.safe_post("api/tools/semgrep", data)
+
+    @mcp.tool()
+    def safety_check(path: str = ".") -> Dict[str, Any]:
+        """
+        Check Python dependencies for known vulnerabilities using Safety.
+
+        Args:
+            path: Path to the directory containing requirements.txt
+
+        Returns:
+            Vulnerability report in JSON format
+        """
+        data = {
+            "path": path
+        }
+        return kali_client.safe_post("api/tools/safety", data)
+
+    @mcp.tool()
+    def whitebox_scan(path: str = ".") -> Dict[str, Any]:
+        """
+        Perform a specialized regex-based vulnerability scan on source code.
+        Targets SQLi, Command Injection, SSRF, Path Traversal, and Secrets.
+
+        Args:
+            path: Path to the source code directory
+
+        Returns:
+            Identified suspicious code patterns
+        """
+        data = {
+            "path": path
+        }
+        return kali_client.safe_post("api/tools/whitebox/scan", data)
+
+    @mcp.tool()
+    def whitebox_map_project(path: str = ".") -> Dict[str, Any]:
+        """
+        Map the project's entry points (routes) for common web frameworks.
+
+        Args:
+            path: Path to the source code directory
+
+        Returns:
+            List of identified routes and their locations
+        """
+        data = {
+            "path": path
+        }
+        return kali_client.safe_post("api/tools/whitebox/map_project", data)
+
+    @mcp.tool()
     def server_health() -> Dict[str, Any]:
         """
         Check the health status of the Kali API server.
