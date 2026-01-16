@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import pty
+import shlex
 import secrets
 import subprocess
 import sys
@@ -90,6 +91,7 @@ class CommandExecutor:
         logger.info(f"Executing command: {self.command} (wait={wait}, use_pty={use_pty})")
         self.start_time = time.time()
         self.is_running = True
+        self.use_pty = use_pty
         
         try:
             if use_pty:
@@ -125,6 +127,7 @@ class CommandExecutor:
                 self.process = subprocess.Popen(
                     self.command,
                     shell=True,
+                    stdin=subprocess.PIPE,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
@@ -224,6 +227,27 @@ class CommandExecutor:
             except Exception as e:
                 logger.error(f"Error killing process: {e}")
 
+    def send_input(self, data: str):
+        """Send input to the process"""
+        if not self.is_running:
+            return False
+
+        try:
+            if self.use_pty:
+                # PTY expects bytes
+                encoded_data = data.encode() if isinstance(data, str) else data
+                os.write(self.master_fd, encoded_data)
+                return True
+            else:
+                if self.process and self.process.stdin:
+                    # Process was opened with text=True, so it expects str
+                    self.process.stdin.write(data)
+                    self.process.stdin.flush()
+                    return True
+        except Exception as e:
+            logger.error(f"Error sending input: {e}")
+        return False
+
 
 def execute_command(command: str, background: bool = False, use_pty: bool = False) -> Dict[str, Any]:
     """
@@ -295,7 +319,7 @@ def ffuf():
         if not url:
             return jsonify({"error": "URL parameter is required"}), 400
 
-        command = f"ffuf -u {url} -w {wordlist}"
+        command = f"ffuf -u {shlex.quote(url)} -w {shlex.quote(wordlist)}"
 
         if additional_args:
             command += f" {additional_args}"
@@ -304,6 +328,121 @@ def ffuf():
         return jsonify(result)
     except Exception as e:
         logger.error(f"Error in ffuf endpoint: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/tools/nuclei", methods=["POST"])
+@require_api_key
+def nuclei():
+    """Execute nuclei with the provided parameters."""
+    try:
+        params = request.json
+        target = params.get("target", "")
+        templates = params.get("templates", "")
+        additional_args = params.get("additional_args", "")
+
+        if not target:
+            return jsonify({"error": "target parameter is required"}), 400
+
+        command = f"nuclei -u {shlex.quote(target)}"
+
+        if templates:
+            command += f" -t {shlex.quote(templates)}"
+
+        if additional_args:
+            command += f" {additional_args}"
+
+        result = execute_command(command)
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error in nuclei endpoint: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/tools/feroxbuster", methods=["POST"])
+@require_api_key
+def feroxbuster():
+    """Execute feroxbuster with the provided parameters."""
+    try:
+        params = request.json
+        url = params.get("url", "")
+        wordlist = params.get("wordlist", "")
+        additional_args = params.get("additional_args", "")
+
+        if not url:
+            return jsonify({"error": "url parameter is required"}), 400
+
+        command = f"feroxbuster -u {shlex.quote(url)}"
+
+        if wordlist:
+            command += f" -w {shlex.quote(wordlist)}"
+
+        if additional_args:
+            command += f" {additional_args}"
+
+        result = execute_command(command)
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error in feroxbuster endpoint: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/tools/nxc", methods=["POST"])
+@require_api_key
+def nxc():
+    """Execute NetExec (nxc) with the provided parameters."""
+    try:
+        params = request.json
+        protocol = params.get("protocol", "smb")
+        target = params.get("target", "")
+        username = params.get("username", "")
+        password = params.get("password", "")
+        additional_args = params.get("additional_args", "")
+
+        if not target:
+            return jsonify({"error": "target parameter is required"}), 400
+
+        command = f"nxc {shlex.quote(protocol)} {shlex.quote(target)}"
+
+        if username:
+            command += f" -u {shlex.quote(username)}"
+        if password:
+            command += f" -p {shlex.quote(password)}"
+
+        if additional_args:
+            command += f" {additional_args}"
+
+        result = execute_command(command)
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error in nxc endpoint: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/tools/msfvenom", methods=["POST"])
+@require_api_key
+def msfvenom():
+    """Execute msfvenom with the provided parameters."""
+    try:
+        params = request.json
+        payload = params.get("payload", "")
+        options = params.get("options", {})
+        format_type = params.get("format", "elf")
+        output_file = params.get("output", "")
+
+        if not payload:
+            return jsonify({"error": "payload parameter is required"}), 400
+
+        command = f"msfvenom -p {shlex.quote(payload)}"
+
+        for key, value in options.items():
+            command += f" {shlex.quote(f'{key}={value}')}"
+
+        command += f" -f {shlex.quote(format_type)}"
+
+        if output_file:
+            command += f" -o {shlex.quote(output_file)}"
+
+        result = execute_command(command)
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error in msfvenom endpoint: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/tools/searchsploit", methods=["POST"])
@@ -318,7 +457,7 @@ def searchsploit():
         if not query:
             return jsonify({"error": "Query parameter is required"}), 400
 
-        command = f"searchsploit {query}"
+        command = f"searchsploit {shlex.quote(query)}"
 
         if additional_args:
             command += f" {additional_args}"
@@ -343,7 +482,7 @@ def hashcat():
         if not hash_file or not mode:
             return jsonify({"error": "hash_file and mode parameters are required"}), 400
 
-        command = f"hashcat -m {mode} {hash_file} {wordlist}"
+        command = f"hashcat -m {shlex.quote(str(mode))} {shlex.quote(hash_file)} {shlex.quote(wordlist)}"
 
         if additional_args:
             command += f" {additional_args}"
@@ -372,16 +511,16 @@ def nmap():
                 "error": "Target parameter is required"
             }), 400        
         
-        command = f"nmap {scan_type}"
+        command = f"nmap {shlex.quote(scan_type)}"
         
         if ports:
-            command += f" -p {ports}"
+            command += f" -p {shlex.quote(ports)}"
         
         if additional_args:
             # Basic validation for additional args - more sophisticated validation would be better
             command += f" {additional_args}"
         
-        command += f" {target}"
+        command += f" {shlex.quote(target)}"
         
         result = execute_command(command)
         return jsonify(result)
@@ -416,7 +555,7 @@ def gobuster():
                 "error": f"Invalid mode: {mode}. Must be one of: dir, dns, fuzz, vhost"
             }), 400
         
-        command = f"gobuster {mode} -u {url} -w {wordlist}"
+        command = f"gobuster {shlex.quote(mode)} -u {shlex.quote(url)} -w {shlex.quote(wordlist)}"
         
         if additional_args:
             command += f" {additional_args}"
@@ -446,7 +585,7 @@ def dirb():
                 "error": "URL parameter is required"
             }), 400
         
-        command = f"dirb {url} {wordlist}"
+        command = f"dirb {shlex.quote(url)} {shlex.quote(wordlist)}"
         
         if additional_args:
             command += f" {additional_args}"
@@ -475,7 +614,7 @@ def nikto():
                 "error": "Target parameter is required"
             }), 400
         
-        command = f"nikto -h {target}"
+        command = f"nikto -h {shlex.quote(target)}"
         
         if additional_args:
             command += f" {additional_args}"
@@ -505,10 +644,10 @@ def sqlmap():
                 "error": "URL parameter is required"
             }), 400
         
-        command = f"sqlmap -u {url} --batch"
+        command = f"sqlmap -u {shlex.quote(url)} --batch"
         
         if data:
-            command += f" --data=\"{data}\""
+            command += f" --data={shlex.quote(data)}"
         
         if additional_args:
             command += f" {additional_args}"
@@ -599,19 +738,19 @@ def hydra():
         command = f"hydra -t 4"
         
         if username:
-            command += f" -l {username}"
+            command += f" -l {shlex.quote(username)}"
         elif username_file:
-            command += f" -L {username_file}"
+            command += f" -L {shlex.quote(username_file)}"
         
         if password:
-            command += f" -p {password}"
+            command += f" -p {shlex.quote(password)}"
         elif password_file:
-            command += f" -P {password_file}"
+            command += f" -P {shlex.quote(password_file)}"
         
         if additional_args:
             command += f" {additional_args}"
         
-        command += f" {target} {service}"
+        command += f" {shlex.quote(target)} {shlex.quote(service)}"
         
         result = execute_command(command)
         return jsonify(result)
@@ -642,15 +781,15 @@ def john():
         command = f"john"
         
         if format_type:
-            command += f" --format={format_type}"
+            command += f" --format={shlex.quote(format_type)}"
         
         if wordlist:
-            command += f" --wordlist={wordlist}"
+            command += f" --wordlist={shlex.quote(wordlist)}"
         
         if additional_args:
             command += f" {additional_args}"
         
-        command += f" {hash_file}"
+        command += f" {shlex.quote(hash_file)}"
         
         result = execute_command(command)
         return jsonify(result)
@@ -676,7 +815,7 @@ def wpscan():
                 "error": "URL parameter is required"
             }), 400
         
-        command = f"wpscan --url {url}"
+        command = f"wpscan --url {shlex.quote(url)}"
         
         if additional_args:
             command += f" {additional_args}"
@@ -705,7 +844,7 @@ def enum4linux():
                 "error": "Target parameter is required"
             }), 400
         
-        command = f"enum4linux {additional_args} {target}"
+        command = f"enum4linux {additional_args} {shlex.quote(target)}"
         
         result = execute_command(command)
         return jsonify(result)
@@ -892,6 +1031,61 @@ def kill_task(task_id):
 
         return jsonify({"message": f"Task {task_id} killed"})
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/tasks/<task_id>/input", methods=["POST"])
+@require_api_key
+def send_task_input(task_id):
+    """Send input to a background task."""
+    try:
+        params = request.json
+        input_data = params.get("input", "")
+
+        if not input_data:
+            return jsonify({"error": "Input data is required"}), 400
+
+        with task_lock:
+            if task_id not in tasks:
+                return jsonify({"error": "Task not found"}), 404
+
+            tinfo = tasks[task_id]
+            executor = tinfo["executor"]
+            success = executor.send_input(input_data)
+
+        if success:
+            return jsonify({"message": "Input sent successfully"})
+        else:
+            return jsonify({"error": "Failed to send input or task not running"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/batch", methods=["POST"])
+@require_api_key
+def batch_commands():
+    """Execute multiple commands in parallel in the background."""
+    try:
+        params = request.json
+        commands = params.get("commands", [])
+        use_pty = params.get("use_pty", False)
+
+        if not commands:
+            return jsonify({"error": "Commands list is required"}), 400
+
+        batch_results = []
+
+        for cmd in commands:
+            res = execute_command(cmd, background=True, use_pty=use_pty)
+            batch_results.append({
+                "command": cmd,
+                "task_id": res.get("task_id")
+            })
+
+        return jsonify({
+            "message": f"Started {len(commands)} commands in the background",
+            "tasks": batch_results
+        })
+    except Exception as e:
+        logger.error(f"Error in batch execution: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 # System Information Endpoints

@@ -2,7 +2,7 @@
 
 **Kali MCP Server** is a lightweight API bridge that connects MCP Clients (e.g: Claude Desktop, [5ire](https://github.com/nanbingxyz/5ire)) to the API server which allows excuting commands on a Linux terminal.
 
-This allows the MCP to run terminal commands like `nmap`, `nxc` or any other tool, interact with web applications using tools like `curl`, `wget`, `gobuster`. 
+This allows the MCP to run terminal commands like `nmap`, `nxc`, `nuclei`, `feroxbuster` or any other tool, interact with web applications using tools like `curl`, `wget`, `gobuster`.
  And perform **AI-assisted penetration testing**, solving **CTF web challenge** in real time, helping in **solving machines from HTB or THM**.
 
 ## My Medium Article on This Tool
@@ -37,7 +37,8 @@ https://github.com/user-attachments/assets/3ec06ff8-0bdf-4ad5-be71-2ec490b7ee27
 
 - 🧠 **AI Endpoint Integration**: Connect your kali to any MCP of your liking such as claude desktop or 5ier.
 - 🖥️ **Command Execution API**: Exposes a controlled API to execute terminal commands on your Kali Linux machine.
-- 🐚 **Background & PTY Support**: Run long-running scans in the background and use pseudo-terminals for better tool compatibility.
+- 🐚 **Background, PTY & Interactive Support**: Run long-running scans in the background, use pseudo-terminals, and send interactive input to running tasks.
+- ⚡ **Batch Processing**: Execute multiple commands in parallel for faster reconnaissance and scanning.
 - 📁 **File Management**: Tools to list, read, write, and delete files on the remote Kali machine.
 - 🕸️ **Web Challenge Support**: AI can interact with websites and APIs, capture flags via `curl` and any other tool AI the needs.
 - 🔐 **Enhanced Security**: Optional API Key authentication to protect your Kali API.
