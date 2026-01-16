@@ -37,25 +37,33 @@ https://github.com/user-attachments/assets/3ec06ff8-0bdf-4ad5-be71-2ec490b7ee27
 
 - 🧠 **AI Endpoint Integration**: Connect your kali to any MCP of your liking such as claude desktop or 5ier.
 - 🖥️ **Command Execution API**: Exposes a controlled API to execute terminal commands on your Kali Linux machine.
+- 🐚 **Background & PTY Support**: Run long-running scans in the background and use pseudo-terminals for better tool compatibility.
+- 📁 **File Management**: Tools to list, read, write, and delete files on the remote Kali machine.
 - 🕸️ **Web Challenge Support**: AI can interact with websites and APIs, capture flags via `curl` and any other tool AI the needs.
-- 🔐 **Designed for Offensive Security Professionals**: Ideal for red teamers, bug bounty hunters, or CTF players automating common tasks.
+- 🔐 **Enhanced Security**: Optional API Key authentication to protect your Kali API.
+- 🔍 **System Context**: AI can gather network and system information to better understand the target environment.
 
 ---
 
 ## 🛠️ Installation
 
-### On your Linux Machine (Will act as MCP Server)
+### On your Linux Machine (Will act as API Server)
 ```bash
 git clone https://github.com/Wh0am123/MCP-Kali-Server.git
 cd MCP-Kali-Server
+pip install flask requests psutil
+# Set an API Key for security
+export KALI_API_KEY=your_secure_key_here
 python3 kali_server.py
 ```
 
 ### On your MCP Client (You can run on Windows or Linux)
-- You will want to run `python3 /absolute/path/to/mcp_server.py http://LINUX_IP:5000`
+- You will want to run `python3 /absolute/path/to/mcp_server.py --server http://LINUX_IP:5000 --api-key your_secure_key_here`
 
-#### Configuration for claude desktop:
-edit (C:\Users\USERNAME\AppData\Roaming\Claude\claude_desktop_config.json)
+#### Configuration for Claude Desktop:
+Edit `claude_desktop_config.json`:
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
 
 ```json
 {
@@ -65,7 +73,9 @@ edit (C:\Users\USERNAME\AppData\Roaming\Claude\claude_desktop_config.json)
             "args": [
                 "/absolute/path/to/mcp_server.py",
                 "--server",
-                "http://LINUX_IP:5000/"
+                "http://LINUX_IP:5000/",
+                "--api-key",
+                "your_secure_key_here"
             ]
         }
     }
