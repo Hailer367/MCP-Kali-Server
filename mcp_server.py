@@ -501,6 +501,200 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
         return kali_client.safe_post("api/tools/msfvenom", data)
 
     @mcp.tool()
+    def semgrep_scan(path: str = ".", config: str = "p/default", additional_args: str = "") -> Dict[str, Any]:
+        """
+        Execute Semgrep static analysis on a directory.
+
+        Args:
+            path: Path to the directory to scan
+            config: Semgrep configuration (default: p/default)
+            additional_args: Additional Semgrep arguments
+
+        Returns:
+            Scan results in JSON format
+        """
+        data = {
+            "path": path,
+            "config": config,
+            "additional_args": additional_args
+        }
+        return kali_client.safe_post("api/tools/semgrep", data)
+
+    @mcp.tool()
+    def safety_check(path: str = ".") -> Dict[str, Any]:
+        """
+        Check Python dependencies for known vulnerabilities using Safety.
+
+        Args:
+            path: Path to the directory containing requirements.txt
+
+        Returns:
+            Vulnerability report in JSON format
+        """
+        data = {
+            "path": path
+        }
+        return kali_client.safe_post("api/tools/safety", data)
+
+    @mcp.tool()
+    def whitebox_scan(path: str = ".") -> Dict[str, Any]:
+        """
+        Perform a specialized regex-based vulnerability scan on source code.
+        Targets SQLi, Command Injection, SSRF, Path Traversal, and Secrets.
+
+        Args:
+            path: Path to the source code directory
+
+        Returns:
+            Identified suspicious code patterns
+        """
+        data = {
+            "path": path
+        }
+        return kali_client.safe_post("api/tools/whitebox/scan", data)
+
+    @mcp.tool()
+    def whitebox_map_project(path: str = ".") -> Dict[str, Any]:
+        """
+        Map the project's entry points (routes) for common web frameworks.
+
+        Args:
+            path: Path to the source code directory
+
+        Returns:
+            List of identified routes and their locations
+        """
+        data = {
+            "path": path
+        }
+        return kali_client.safe_post("api/tools/whitebox/map_project", data)
+
+    @mcp.tool()
+    def whitebox_taint_trace(variable: str, path: str = ".") -> Dict[str, Any]:
+        """
+        Trace variable usage and assignments across files to aid taint analysis.
+
+        Args:
+            variable: The variable name to trace
+            path: Path to the source code directory
+
+        Returns:
+            Grep-like results showing variable usage
+        """
+        data = {
+            "path": path,
+            "variable": variable
+        }
+        return kali_client.safe_post("api/whitebox/trace", data)
+
+    @mcp.tool()
+    def save_exploit_poc(poc_content: str, vulnerability_id: Optional[str] = None, filename: str = "exploit_poc.py") -> Dict[str, Any]:
+        """
+        Save a generated Proof of Concept (PoC) exploit to the server and database.
+
+        Args:
+            poc_content: The content of the exploit script
+            vulnerability_id: Optional UUID of the related vulnerability in Supabase
+            filename: Name of the file to save
+
+        Returns:
+            Status and file path
+        """
+        data = {
+            "poc_content": poc_content,
+            "vulnerability_id": vulnerability_id,
+            "filename": filename
+        }
+        return kali_client.safe_post("api/whitebox/save_poc", data)
+
+    @mcp.tool()
+    def browser_action(action: str = "navigate", url: str = "", selector: str = "", data: str = "", wait_for: str = "", screenshot: bool = True) -> Dict[str, Any]:
+        """
+        Perform an autonomous browser action using a headless browser (Playwright).
+        Use this to verify web vulnerabilities or explore web apps.
+
+        Args:
+            action: navigate, click, fill
+            url: URL to navigate to
+            selector: CSS selector for click/fill
+            data: Data to fill into a field
+            wait_for: Selector to wait for after action
+            screenshot: Whether to take a screenshot
+
+        Returns:
+            Browser session results including screenshot path and content
+        """
+        data = {
+            "action": action,
+            "url": url,
+            "selector": selector,
+            "data": data,
+            "wait_for": wait_for,
+            "screenshot": screenshot
+        }
+        return kali_client.safe_post("api/browser/action", data)
+
+    @mcp.tool()
+    def db_init_setup() -> Dict[str, Any]:
+        """
+        Initialize the Supabase database tables.
+        If auto-creation is not possible, it returns the SQL to run manually.
+
+        Returns:
+            Database status and setup SQL
+        """
+        return kali_client.safe_post("api/db/init", {})
+
+    @mcp.tool()
+    def db_save_vulnerability(
+        target_id: str,
+        tool: str,
+        vuln_type: str,
+        severity: str,
+        description: str,
+        evidence: str = "",
+        metadata: Dict[str, Any] = {}
+    ) -> Dict[str, Any]:
+        """
+        Save an identified vulnerability finding to the persistent Supabase database.
+
+        Args:
+            target_id: UUID of the target
+            tool: Tool that found the vulnerability
+            vuln_type: Type of vulnerability (e.g. SQLi)
+            severity: Critical, High, Medium, Low, Info
+            description: Detailed description
+            evidence: Snippet or output proving the vulnerability
+            metadata: Additional JSON data
+
+        Returns:
+            Status of the save operation
+        """
+        data = {
+            "target_id": target_id,
+            "tool": tool,
+            "vuln_type": vuln_type,
+            "severity": severity,
+            "description": description,
+            "evidence": evidence,
+            "metadata": metadata
+        }
+        return kali_client.safe_post("api/db/save_finding", data)
+
+    @mcp.tool()
+    def db_query_table(table: str = "vulnerabilities") -> Dict[str, Any]:
+        """
+        Query records from a specific table in the Supabase database.
+
+        Args:
+            table: vulnerabilities, targets, exploits, browser_history
+
+        Returns:
+            List of records
+        """
+        return kali_client.safe_get("api/db/query", {"table": table})
+
+    @mcp.tool()
     def server_health() -> Dict[str, Any]:
         """
         Check the health status of the Kali API server.

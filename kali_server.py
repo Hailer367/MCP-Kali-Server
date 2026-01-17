@@ -17,8 +17,10 @@ import sys
 import time
 import traceback
 import threading
-from typing import Dict, Any, Optional
+import asyncio
+from typing import Dict, Any, Optional, List
 from flask import Flask, request, jsonify
+from supabase import create_client, Client
 
 # Configure logging
 logging.basicConfig(
@@ -35,6 +37,18 @@ API_PORT = int(os.environ.get("API_PORT", 5000))
 DEBUG_MODE = os.environ.get("DEBUG_MODE", "0").lower() in ("1", "true", "yes", "y")
 API_KEY = os.environ.get("KALI_API_KEY")
 COMMAND_TIMEOUT = 180  # 5 minutes default timeout
+
+# Supabase Configuration
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+supabase: Optional[Client] = None
+
+if SUPABASE_URL and SUPABASE_KEY:
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        logger.info("Supabase client initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize Supabase client: {e}")
 
 app = Flask(__name__)
 
@@ -854,6 +868,331 @@ def enum4linux():
         return jsonify({
             "error": f"Server error: {str(e)}"
         }), 500
+
+@app.route("/api/tools/semgrep", methods=["POST"])
+@require_api_key
+def semgrep():
+    """Execute semgrep scan with the provided parameters."""
+    try:
+        params = request.json
+        path = params.get("path", ".")
+        config = params.get("config", "p/default")
+        additional_args = params.get("additional_args", "")
+
+        command = f"semgrep scan --json --config {shlex.quote(config)} {shlex.quote(path)}"
+        if additional_args:
+            command += f" {additional_args}"
+
+        result = execute_command(command)
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error in semgrep endpoint: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/tools/safety", methods=["POST"])
+@require_api_key
+def safety():
+    """Execute safety check for Python dependencies."""
+    try:
+        params = request.json
+        path = params.get("path", ".")
+
+        # Check if requirements.txt exists in the path
+        req_path = os.path.join(path, "requirements.txt")
+        if not os.path.exists(req_path):
+            return jsonify({"error": f"requirements.txt not found in {path}"}), 400
+
+        command = f"safety check -r {shlex.quote(req_path)} --json"
+        result = execute_command(command)
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error in safety endpoint: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/tools/whitebox/scan", methods=["POST"])
+@require_api_key
+def whitebox_scan():
+    """Perform a multi-pattern regex scan for vulnerabilities using ripgrep."""
+    try:
+        params = request.json
+        path = params.get("path", ".")
+
+        patterns = {
+            "SQL Injection": r"(?i)(select|insert|update|delete|drop).*where.*=.*['\"]\\s*\\+|f['\"].*\\{.*\\}",
+            "Command Injection": r"(os\.system|subprocess\.(Popen|run|call|check_output)|exec|eval|system)\(",
+            "SSRF": r"(requests\.(get|post|put|delete|patch|head|options)|urllib\.request\.urlopen|aiohttp\.ClientSession.*\.get)\(",
+            "Path Traversal": r"(open|os\.path\.(join|abspath)|pathlib\.Path)\(",
+            "Hardcoded Secrets": r"(?i)(api_key|password|secret|token|auth_token|access_key|private_key).*=.*['\"][a-zA-Z0-9\-_]{10,}['\"]"
+        }
+
+        results = {}
+        for name, pattern in patterns.items():
+            cmd = f"rg --json -e {shlex.quote(pattern)} {shlex.quote(path)}"
+            res = execute_command(cmd)
+            results[name] = res.get("stdout", "")
+
+        return jsonify(results)
+    except Exception as e:
+        logger.error(f"Error in whitebox scan: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/tools/whitebox/map_project", methods=["POST"])
+@require_api_key
+def map_project():
+    """Identify entry points (routes) in the project."""
+    try:
+        params = request.json
+        path = params.get("path", ".")
+
+        # Patterns for common web frameworks
+        route_patterns = {
+            "Flask/Django": r"@(app|blueprint|api)\.(route|get|post|put|delete|patch)\(|path\(|re_path\(",
+            "Express/Node.js": r"\.(get|post|put|delete|patch|use)\(['\"]\/",
+            "FastAPI": r"@app\.(get|post|put|delete|patch|options|head|trace)\("
+        }
+
+        results = {}
+        for framework, pattern in route_patterns.items():
+            cmd = f"rg --json -e {shlex.quote(pattern)} {shlex.quote(path)}"
+            res = execute_command(cmd)
+            results[framework] = res.get("stdout", "")
+
+        return jsonify(results)
+    except Exception as e:
+        logger.error(f"Error in project mapping: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/whitebox/trace", methods=["POST"])
+@require_api_key
+def whitebox_trace():
+    """Trace variable usage and assignments across files for taint analysis."""
+    try:
+        params = request.json
+        path = params.get("path", ".")
+        variable = params.get("variable", "")
+
+        if not variable:
+            return jsonify({"error": "variable parameter is required"}), 400
+
+        # Match variable assignments and usages
+        # e.g., var = ..., var.method(), func(var)
+        pattern = fr"({variable}\s*=|[^\w]{variable}[^\w])"
+
+        cmd = f"rg --json -e {shlex.quote(pattern)} {shlex.quote(path)}"
+        result = execute_command(cmd)
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error in whitebox trace: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/whitebox/save_poc", methods=["POST"])
+@require_api_key
+def save_poc():
+    """Save a generated Proof of Concept (PoC) exploit."""
+    try:
+        params = request.json
+        vulnerability_id = params.get("vulnerability_id")
+        poc_content = params.get("poc_content", "")
+        filename = params.get("filename", "exploit_poc.py")
+
+        if not poc_content:
+            return jsonify({"error": "poc_content is required"}), 400
+
+        # Save to file
+        poc_dir = "exploits"
+        os.makedirs(poc_dir, exist_ok=True)
+        file_path = os.path.join(poc_dir, filename)
+
+        with open(file_path, "w") as f:
+            f.write(poc_content)
+
+        # Optionally save to Supabase
+        db_res = None
+        if supabase and vulnerability_id:
+            try:
+                db_res = supabase.table("exploits").insert({
+                    "vulnerability_id": vulnerability_id,
+                    "poc_content": poc_content,
+                    "file_path": os.path.abspath(file_path)
+                }).execute()
+            except Exception as e:
+                logger.error(f"Failed to save PoC to Supabase: {e}")
+
+        return jsonify({
+            "message": f"PoC saved to {file_path}",
+            "file_path": os.path.abspath(file_path),
+            "supabase_record": str(db_res) if db_res else None
+        })
+    except Exception as e:
+        logger.error(f"Error in save_poc: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/browser/action", methods=["POST"])
+@require_api_key
+def browser_action():
+    """Perform an autonomous browser action using Playwright."""
+    try:
+        params = request.json
+        action = params.get("action", "navigate")
+        url = params.get("url", "")
+        selector = params.get("selector", "")
+        data = params.get("data", "")
+        wait_for = params.get("wait_for", "")
+        screenshot = params.get("screenshot", True)
+
+        async def run_browser():
+            from playwright.async_api import async_playwright
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True)
+                page = await browser.new_page()
+
+                result = {"logs": []}
+
+                try:
+                    if action == "navigate" or url:
+                        await page.goto(url)
+                        result["logs"].append(f"Navigated to {url}")
+
+                    if action == "click" and selector:
+                        await page.click(selector)
+                        result["logs"].append(f"Clicked {selector}")
+
+                    if action == "fill" and selector and data:
+                        await page.fill(selector, data)
+                        result["logs"].append(f"Filled {selector} with {data}")
+
+                    if wait_for:
+                        await page.wait_for_selector(wait_for, timeout=5000)
+                        result["logs"].append(f"Waited for {wait_for}")
+
+                    if screenshot:
+                        shot_path = f"screenshots/browser_{int(time.time())}.png"
+                        os.makedirs("screenshots", exist_ok=True)
+                        await page.screenshot(path=shot_path)
+                        result["screenshot"] = os.path.abspath(shot_path)
+
+                    result["url"] = page.url
+                    result["content"] = await page.content()
+                    result["title"] = await page.title()
+
+                except Exception as inner_e:
+                    result["error"] = str(inner_e)
+                finally:
+                    await browser.close()
+                return result
+
+        # Run async code in a sync context
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(run_browser())
+
+        # Save session to Supabase if available
+        if supabase:
+            try:
+                supabase.table("browser_history").insert({
+                    "url": result.get("url"),
+                    "action": action,
+                    "screenshot_path": result.get("screenshot"),
+                    "metadata": result
+                }).execute()
+            except Exception as e:
+                logger.error(f"Failed to save browser action to Supabase: {e}")
+
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Error in browser action: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/db/init", methods=["POST"])
+@require_api_key
+def db_init():
+    """Initialize Supabase tables. Returns SQL needed if auto-creation fails."""
+    sql = """
+    -- SQL for Supabase Editor
+    CREATE TABLE IF NOT EXISTS targets (
+        id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+        host TEXT NOT NULL,
+        status TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS vulnerabilities (
+        id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+        target_id UUID REFERENCES targets(id),
+        tool TEXT,
+        vuln_type TEXT,
+        severity TEXT,
+        description TEXT,
+        evidence TEXT,
+        metadata JSONB,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS exploits (
+        id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+        vulnerability_id UUID REFERENCES vulnerabilities(id),
+        poc_content TEXT,
+        file_path TEXT,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS browser_history (
+        id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+        url TEXT,
+        action TEXT,
+        screenshot_path TEXT,
+        metadata JSONB,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+    """
+
+    if not supabase:
+        return jsonify({
+            "error": "Supabase client not initialized. Set SUPABASE_URL and SUPABASE_KEY.",
+            "sql_needed": sql
+        }), 400
+
+    status = {}
+    for table in ["targets", "vulnerabilities", "exploits", "browser_history"]:
+        try:
+            supabase.table(table).select("*").limit(1).execute()
+            status[table] = "Exists/Accessible"
+        except Exception:
+            status[table] = "Missing or Inaccessible (Run SQL provided)"
+
+    return jsonify({
+        "message": "Database status checked. If tables are missing, use the provided SQL in Supabase SQL Editor.",
+        "status": status,
+        "sql_to_run": sql
+    })
+
+@app.route("/api/db/save_finding", methods=["POST"])
+@require_api_key
+def db_save_finding():
+    """Save a vulnerability finding to Supabase."""
+    if not supabase:
+        return jsonify({"error": "Supabase not configured"}), 400
+
+    try:
+        data = request.json
+        res = supabase.table("vulnerabilities").insert(data).execute()
+        return jsonify({"message": "Finding saved", "data": str(res.data)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/db/query", methods=["GET"])
+@require_api_key
+def db_query():
+    """Query findings from Supabase."""
+    if not supabase:
+        return jsonify({"error": "Supabase not configured"}), 400
+
+    try:
+        table = request.args.get("table", "vulnerabilities")
+        res = supabase.table(table).select("*").execute()
+        return jsonify(res.data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # File Management Endpoints
