@@ -2,155 +2,36 @@
 
 **Kali MCP Server** is a lightweight API bridge that connects MCP Clients (e.g: Claude Desktop, [5ire](https://github.com/nanbingxyz/5ire)) to the API server which allows excuting commands on a Linux terminal.
 
-This allows the MCP to run terminal commands like `nmap`, `nxc`, `nuclei`, `feroxbuster` or any other tool, interact with web applications using tools like `curl`, `wget`, `gobuster`.
- And perform **AI-assisted penetration testing**, solving **CTF web challenge** in real time, helping in **solving machines from HTB or THM**.
-
-## My Medium Article on This Tool
-
-[![How MCP is Revolutionizing Offensive Security](https://miro.medium.com/v2/resize:fit:828/format:webp/1*g4h-mIpPEHpq_H63W7Emsg.png)](https://yousofnahya.medium.com/how-mcp-is-revolutionizing-offensive-security-93b2442a5096)
-
-👉 [**How MCP is Revolutionizing Offensive Security**](https://yousofnahya.medium.com/how-mcp-is-revolutionizing-offensive-security-93b2442a5096)
-
----
-
-## 🔍 Use Case
-
-The goal is to enable AI-driven offensive security testing by:
-
-- Letting the MCP interact with AI endpoints like OpenAI, Claude, DeepSeek, or any other models.
-- Exposing an API to execute commands on a Kali machine.
-- Using AI to suggest and run terminal commands to solve CTF challenges or automate recon/exploitation tasks.
-- Allowing MCP apps to send custom requests (e.g., `curl`, `nmap`, `ffuf`, etc.) and receive structured outputs.
-
-Here are some example for my testing (I used google's AI `gemini 2.0 flash`)
-
-### Example solving my web CTF challenge in RamadanCTF
-https://github.com/user-attachments/assets/dc93b71d-9a4a-4ad5-8079-2c26c04e5397
-
-### Trying to solve machine "code" from HTB
-https://github.com/user-attachments/assets/3ec06ff8-0bdf-4ad5-be71-2ec490b7ee27
-
-
----
-
 ## 🚀 Features
 
-- 🧠 **AI Endpoint Integration**: Connect your kali to any MCP of your liking such as claude desktop or 5ier.
-- 🖥️ **Command Execution API**: Exposes a controlled API to execute terminal commands on your Kali Linux machine.
-- 🐚 **Background, PTY & Interactive Support**: Run long-running scans in the background, use pseudo-terminals, and send interactive input to running tasks.
-- ⚡ **Batch Processing**: Execute multiple commands in parallel for faster reconnaissance and scanning.
-- 🔍 **White Box Scanning**: Specialized tools for deep source code analysis, including Semgrep, Safety, and custom regex-based scanners to identify SQLi, Command Injection, and more.
-- 📁 **File Management**: Tools to list, read, write, and delete files on the remote Kali machine.
-- 🕸️ **Web Challenge Support**: AI can interact with websites and APIs, capture flags via `curl` and any other tool AI the needs.
-- 🔐 **Enhanced Security**: Optional API Key authentication to protect your Kali API.
-- 🔍 **System Context**: AI can gather network and system information to better understand the target environment.
-- 🌐 **Autonomous Browser**: Integrated Playwright for headless browser actions, enabling the AI to verify web vulnerabilities and navigate complex web apps.
-- 📊 **Persistent Database**: Supabase integration for long-term storage of targets, findings, and exploits.
-
----
+- 🧠 **AI Endpoint Integration**: Connect your kali to any MCP client.
+- 🖥️ **Command Execution**: Execute terminal commands safely with `shlex` sanitization.
+- 🐚 **Interactive Terminal**: Send input to running background tasks.
+- 🌐 **Autonomous Browser**: Headless browser (Playwright) for dynamic analysis and exploit verification.
+- 📊 **Persistent Database**: Supabase integration for long-term storage of findings and session data.
+- 🛠️ **Git Knowledge Base**: Bind a GitHub repo as a permanent database for tools, research, and exploits.
+- 🔍 **White Box Scanning**: Specialized tools (Semgrep, Safety, Regex) for deep source code analysis.
 
 ## 🛠️ Installation
 
-### On your Linux Machine (Will act as API Server)
 ```bash
-git clone https://github.com/Wh0am123/MCP-Kali-Server.git
+git clone https://github.com/Hailer367/MCP-Kali-Server.git
 cd MCP-Kali-Server
 pip install flask requests psutil supabase playwright
-playwright install-deps
 playwright install chromium
+playwright install-deps
 
-# Optional: Set Supabase credentials for persistent findings
-export SUPABASE_URL=your_supabase_project_url
-export SUPABASE_KEY=your_supabase_service_role_key
+# Configuration
+export KALI_API_KEY=your_key
+export TOKEN=your_github_token
+export SUPABASE_URL=your_url
+export SUPABASE_KEY=your_key
 
-# Set an API Key for security
-export KALI_API_KEY=your_secure_key_here
 python3 kali_server.py
 ```
 
-### 🗄️ Supabase Setup
-To use the persistent database, create a Supabase project and run the following SQL in the **Supabase SQL Editor** (The AI can also provide this via the `db_init_setup` tool):
-
-```sql
-CREATE TABLE IF NOT EXISTS targets (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    host TEXT NOT NULL,
-    status TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS vulnerabilities (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    target_id UUID REFERENCES targets(id),
-    tool TEXT,
-    vuln_type TEXT,
-    severity TEXT,
-    description TEXT,
-    evidence TEXT,
-    metadata JSONB,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS exploits (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    vulnerability_id UUID REFERENCES vulnerabilities(id),
-    poc_content TEXT,
-    file_path TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS browser_history (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    url TEXT,
-    action TEXT,
-    screenshot_path TEXT,
-    metadata JSONB,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-```
-
-### On your MCP Client (You can run on Windows or Linux)
-- You will want to run `python3 /absolute/path/to/mcp_server.py --server http://LINUX_IP:5000 --api-key your_secure_key_here`
-
-#### Configuration for Claude Desktop:
-Edit `claude_desktop_config.json`:
-- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-
-```json
-{
-    "mcpServers": {
-        "kali_mcp": {
-            "command": "python3",
-            "args": [
-                "/absolute/path/to/mcp_server.py",
-                "--server",
-                "http://LINUX_IP:5000/",
-                "--api-key",
-                "your_secure_key_here"
-            ]
-        }
-    }
-}
-```
-
-#### Configuration for [5ire](https://github.com/nanbingxyz/5ire) Desktop Application:
-- Simply add an MCP with the command `python3 /absolute/path/to/mcp_server.py http://LINUX_IP:5000` and it will automatically generate the needed configuration files.
-
-## 🔮 Other Possibilities
-
-There are more possibilites than described since the AI model can now execute commands on the terminal. Here are some example:
-
-- Memory forensics using Volatility
-  - Automating memory analysis tasks such as process enumeration, DLL injection checks, and registry extraction from memory dumps.
-
-- Disk forensics with SleuthKit
-  - Automating analysis from disk images, timeline generation, file carving, and hash comparisons.
-
-- **White Box Source Code Analysis**
-  - AI can now scan the entire repository for vulnerabilities using Semgrep, Safety, and specialized regex-based scanners. It can also map project routes and entry points to better understand the attack surface.
-
+## 🗄️ Database Setup
+Run the `db_init_setup` tool from the AI or manually execute the provided SQL in your Supabase SQL editor.
 
 ## ⚠️ Disclaimer:
-This project is intended solely for educational and ethical testing purposes. Any misuse of the information or tools provided — including unauthorized access, exploitation, or malicious activity — is strictly prohibited.
-The author assumes no responsibility for misuse.
+This project is for educational and ethical testing purposes only.
