@@ -44,6 +44,8 @@ https://github.com/user-attachments/assets/3ec06ff8-0bdf-4ad5-be71-2ec490b7ee27
 - 🕸️ **Web Challenge Support**: AI can interact with websites and APIs, capture flags via `curl` and any other tool AI the needs.
 - 🔐 **Enhanced Security**: Optional API Key authentication to protect your Kali API.
 - 🔍 **System Context**: AI can gather network and system information to better understand the target environment.
+- 🌐 **Autonomous Browser**: Integrated Playwright for headless browser actions, enabling the AI to verify web vulnerabilities and navigate complex web apps.
+- 📊 **Persistent Database**: Supabase integration for long-term storage of targets, findings, and exploits.
 
 ---
 
@@ -53,10 +55,58 @@ https://github.com/user-attachments/assets/3ec06ff8-0bdf-4ad5-be71-2ec490b7ee27
 ```bash
 git clone https://github.com/Wh0am123/MCP-Kali-Server.git
 cd MCP-Kali-Server
-pip install flask requests psutil
+pip install flask requests psutil supabase playwright
+playwright install-deps
+playwright install chromium
+
+# Optional: Set Supabase credentials for persistent findings
+export SUPABASE_URL=your_supabase_project_url
+export SUPABASE_KEY=your_supabase_service_role_key
+
 # Set an API Key for security
 export KALI_API_KEY=your_secure_key_here
 python3 kali_server.py
+```
+
+### 🗄️ Supabase Setup
+To use the persistent database, create a Supabase project and run the following SQL in the **Supabase SQL Editor** (The AI can also provide this via the `db_init_setup` tool):
+
+```sql
+CREATE TABLE IF NOT EXISTS targets (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    host TEXT NOT NULL,
+    status TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS vulnerabilities (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    target_id UUID REFERENCES targets(id),
+    tool TEXT,
+    vuln_type TEXT,
+    severity TEXT,
+    description TEXT,
+    evidence TEXT,
+    metadata JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS exploits (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    vulnerability_id UUID REFERENCES vulnerabilities(id),
+    poc_content TEXT,
+    file_path TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS browser_history (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    url TEXT,
+    action TEXT,
+    screenshot_path TEXT,
+    metadata JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 ```
 
 ### On your MCP Client (You can run on Windows or Linux)
